@@ -29,7 +29,7 @@ const MapBounds = ({ markers }) => {
         setInitialized(true);
       }
     }
-  }, [markers.length, map, initialized]);
+  }, [markers, map, initialized]);
   return null;
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Filter, User } from 'lucide-react';
 import { auditLogsAPI } from '../utils/authAPI';
@@ -20,12 +20,7 @@ const AuditLogs = () => {
   });
   const [total, setTotal] = useState(0);
 
-  useEffect(() => {
-    loadLogs();
-    loadStats();
-  }, [filters]);
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await auditLogsAPI.getAll(filters);
@@ -37,9 +32,9 @@ const AuditLogs = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const data = await auditLogsAPI.getStats({
         start_date: filters.start_date,
@@ -49,7 +44,12 @@ const AuditLogs = () => {
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
-  };
+  }, [filters.start_date, filters.end_date]);
+
+  useEffect(() => {
+    loadLogs();
+    loadStats();
+  }, [loadLogs, loadStats]);
 
   const handleFilterChange = (key, value) => {
     setFilters({ ...filters, [key]: value, offset: 0 });

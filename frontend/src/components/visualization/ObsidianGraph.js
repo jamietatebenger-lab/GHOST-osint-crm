@@ -10,6 +10,37 @@ import {
 } from 'lucide-react';
 import { DEFAULT_EDGE_LAYERS, isTypeVisible } from '../../utils/edgeLayers';
 
+const GRAPH_THEME = {
+  background: '#1e1e1e',
+  node: {
+    default: '#4c51bf',
+    person: '#667eea',
+    business: '#48bb78',
+    crypto_wallet: '#a855f7',
+    selected: '#f6ad55',
+    hover: '#fc8181',
+    text: '#ffffff'
+  },
+  edge: {
+    family: '#10b981',
+    friend: '#3b82f6',
+    enemy: '#ef4444',
+    associate: '#6b7280',
+    employer: '#8b5cf6',
+    employee: '#a78bfa',
+    suspect: '#ef4444',
+    witness: '#f59e0b',
+    victim: '#ec4899',
+    owner: '#48bb78',
+    owns_business: '#38a169',
+    board_member: '#7c3aed',
+    transaction: '#0891b2',
+    other: '#6b7280'
+  },
+  grid: '#2d3748',
+  text: '#e2e8f0'
+};
+
 const ObsidianGraph = ({
   people = [],
   selectedPersonId = null,
@@ -33,38 +64,6 @@ const ObsidianGraph = ({
   const [sourceNode, setSourceNode] = useState(null);
   const [stats, setStats] = useState({ nodes: 0, edges: 0, clusters: 0 });
   const [nodeDistanceMultiplier, setNodeDistanceMultiplier] = useState(1); // Multiplier for node distance
-
-  // Theme colors (Obsidian-inspired dark theme)
-  const theme = {
-    background: '#1e1e1e',
-    node: {
-      default: '#4c51bf',
-      person: '#667eea',
-      business: '#48bb78',
-      crypto_wallet: '#a855f7',
-      selected: '#f6ad55',
-      hover: '#fc8181',
-      text: '#ffffff'
-    },
-    edge: {
-      family: '#10b981',
-      friend: '#3b82f6',
-      enemy: '#ef4444',
-      associate: '#6b7280',
-      employer: '#8b5cf6',
-      employee: '#a78bfa',
-      suspect: '#ef4444',
-      witness: '#f59e0b',
-      victim: '#ec4899',
-      owner: '#48bb78',
-      owns_business: '#38a169',
-      board_member: '#7c3aed',
-      transaction: '#0891b2',
-      other: '#6b7280'
-    },
-    grid: '#2d3748',
-    text: '#e2e8f0'
-  };
 
   // Prepare graph data
   const prepareGraphData = useCallback(() => {
@@ -167,10 +166,10 @@ const ObsidianGraph = ({
   };
 
   // Get node color (without hover - handled by D3 directly)
-  const getNodeColor = (node, isSelected) => {
-    if (isSelected) return theme.node.selected;
-    if (node.type === 'business') return theme.node.business;
-    if (node.type === 'crypto_wallet') return theme.node.crypto_wallet;
+  const getNodeColor = useCallback((node, isSelected) => {
+    if (isSelected) return GRAPH_THEME.node.selected;
+    if (node.type === 'business') return GRAPH_THEME.node.business;
+    if (node.type === 'crypto_wallet') return GRAPH_THEME.node.crypto_wallet;
 
     // Color by category
     const categoryColors = {
@@ -179,11 +178,38 @@ const ObsidianGraph = ({
       'Witness': '#f59e0b',
       'Victim': '#ec4899',
       'Suspect': '#dc2626',
-      'Business': theme.node.business
+      'Business': GRAPH_THEME.node.business
     };
 
-    return categoryColors[node.category] || theme.node.person;
-  };
+    return categoryColors[node.category] || GRAPH_THEME.node.person;
+  }, []);
+
+  const handleCreateConnection = useCallback((source, target) => {
+    // Person↔business links aren't supported by the connections model yet —
+    // parseInt('business-N') is NaN and used to persist person_id: null,
+    // permanently crashing this view (issue #56). Wallet edges are read-only
+    // here too, but for a different reason: they're written through the
+    // relationships API from the wallet detail modal (issue #82), not the
+    // person.connections JSONB model this in-graph creation flow calls.
+    if (source.type === 'business' || target.type === 'business') {
+      alert(t('obsidianGraph.errorBusinessConnectionsNotSupported'));
+      return;
+    }
+    if (source.type === 'crypto_wallet' || target.type === 'crypto_wallet') {
+      alert(t('obsidianGraph.errorWalletConnectionsNotSupported'));
+      return;
+    }
+    const sourceId = parseInt(source.id, 10);
+    const targetId = parseInt(target.id, 10);
+    if (!Number.isInteger(sourceId) || !Number.isInteger(targetId)) {
+      alert(t('obsidianGraph.errorUnrecognisedNode'));
+      return;
+    }
+    const type = prompt(t('obsidianGraph.promptConnectionType'));
+    if (type && onUpdateConnection) {
+      onUpdateConnection(sourceId, targetId, type, '');
+    }
+  }, [onUpdateConnection, t]);
 
   // Handle resize
   useEffect(() => {
@@ -250,7 +276,7 @@ const ObsidianGraph = ({
     // Create arrow markers for directed edges
     const defs = svg.append('defs');
 
-    Object.keys(theme.edge).forEach(type => {
+    Object.keys(GRAPH_THEME.edge).forEach(type => {
       defs.append('marker')
         .attr('id', `arrow-${type}`)
         .attr('viewBox', '0 -5 10 10')
@@ -261,7 +287,7 @@ const ObsidianGraph = ({
         .attr('orient', 'auto')
         .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', theme.edge[type]);
+        .attr('fill', GRAPH_THEME.edge[type]);
     });
 
     // Create edges
@@ -269,7 +295,7 @@ const ObsidianGraph = ({
       .selectAll('line')
       .data(links)
       .join('line')
-      .attr('stroke', d => theme.edge[d.type] || theme.edge.other)
+      .attr('stroke', d => GRAPH_THEME.edge[d.type] || GRAPH_THEME.edge.other)
       .attr('stroke-width', 2)
       .attr('stroke-opacity', 0.6)
       .attr('marker-end', d => `url(#arrow-${d.type})`)
@@ -285,7 +311,7 @@ const ObsidianGraph = ({
           .attr('x', (d.source.x + d.target.x) / 2)
           .attr('y', (d.source.y + d.target.y) / 2)
           .attr('text-anchor', 'middle')
-          .attr('fill', theme.text)
+          .attr('fill', GRAPH_THEME.text)
           .attr('font-size', '12px')
           .attr('font-weight', 'bold')
           .style('pointer-events', 'none')
@@ -342,7 +368,7 @@ const ObsidianGraph = ({
       nodeGroup.append('text')
         .attr('dy', size + 15)
         .attr('text-anchor', 'middle')
-        .attr('fill', theme.text)
+        .attr('fill', GRAPH_THEME.text)
         .attr('font-size', '11px')
         .attr('font-weight', '500')
         .style('pointer-events', 'none')
@@ -465,7 +491,7 @@ const ObsidianGraph = ({
     return () => {
       simulation.stop();
     };
-  }, [dimensions, people, selectedPersonId, selectedNode, connectionMode, sourceNode, onNodeClick, prepareGraphData, t]);
+  }, [dimensions, people, selectedPersonId, selectedNode, connectionMode, sourceNode, onNodeClick, prepareGraphData, t, nodeDistanceMultiplier, getNodeColor, handleCreateConnection]);
 
   // Handle zoom controls
   const handleZoom = (direction) => {
@@ -487,35 +513,6 @@ const ObsidianGraph = ({
       .call(zoom.transform, d3.zoomIdentity);
   };
 
-  // Handle create connection
-  const handleCreateConnection = (source, target) => {
-    // Person↔business links aren't supported by the connections model yet —
-    // parseInt('business-N') is NaN and used to persist person_id: null,
-    // permanently crashing this view (issue #56). Wallet edges are read-only
-    // here too, but for a different reason: they're written through the
-    // relationships API from the wallet detail modal (issue #82), not the
-    // person.connections JSONB model this in-graph creation flow calls.
-    if (source.type === 'business' || target.type === 'business') {
-      alert(t('obsidianGraph.errorBusinessConnectionsNotSupported'));
-      return;
-    }
-    if (source.type === 'crypto_wallet' || target.type === 'crypto_wallet') {
-      alert(t('obsidianGraph.errorWalletConnectionsNotSupported'));
-      return;
-    }
-    const sourceId = parseInt(source.id, 10);
-    const targetId = parseInt(target.id, 10);
-    if (!Number.isInteger(sourceId) || !Number.isInteger(targetId)) {
-      alert(t('obsidianGraph.errorUnrecognisedNode'));
-      return;
-    }
-    // This would open a modal to select connection type
-    const type = prompt(t('obsidianGraph.promptConnectionType'));
-    if (type && onUpdateConnection) {
-      onUpdateConnection(sourceId, targetId, type, '');
-    }
-  };
-
   return (
     <div ref={containerRef} className="relative w-full h-full bg-gray-900">
       {/* SVG Canvas */}
@@ -523,7 +520,7 @@ const ObsidianGraph = ({
         ref={svgRef}
         width={dimensions.width}
         height={dimensions.height}
-        style={{ background: theme.background }}
+        style={{ background: GRAPH_THEME.background }}
         onClick={() => {
           setSelectedNode(null);
           setShowNodeDetails(false);
@@ -693,7 +690,7 @@ const ObsidianGraph = ({
       <div className="absolute bottom-4 left-4 bg-gray-800 bg-opacity-90 text-white rounded-lg shadow-lg p-3 z-10 max-w-xs">
         <h4 className="font-bold text-sm mb-2">{t('relationshipDiagram.connectionTypesTitle')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-          {Object.entries(theme.edge).map(([type, color]) => (
+          {Object.entries(GRAPH_THEME.edge).map(([type, color]) => (
             <div key={type} className="flex items-center space-x-2">
               <div className="w-6 h-0.5" style={{ backgroundColor: color }}></div>
               <span>{t(`obsidianGraph.edgeTypes.${type}`)}</span>
