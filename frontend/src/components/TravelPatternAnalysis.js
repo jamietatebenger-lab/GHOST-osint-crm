@@ -1,5 +1,5 @@
 // File: frontend/src/components/TravelPatternAnalysis.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MapContainer, TileLayer, Popup, Polyline, CircleMarker } from 'react-leaflet';
 import {
@@ -39,11 +39,7 @@ const TravelPatternAnalysis = ({ personId, personName }) => {
     notes: ''
   });
 
-  useEffect(() => {
-    fetchTravelData();
-  }, [personId]);
-
-  const fetchTravelData = async () => {
+  const fetchTravelData = useCallback(async () => {
     try {
       setLoading(true);
       const data = await travelHistoryAPI.analyze(personId);
@@ -54,7 +50,11 @@ const TravelPatternAnalysis = ({ personId, personName }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [personId, t]);
+
+  useEffect(() => {
+    fetchTravelData();
+  }, [fetchTravelData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
